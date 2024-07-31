@@ -1,0 +1,594 @@
+{
+    "outputs": [
+		"tp_0_est", "tp_min", "tp_max", "wf_min", "wf_max",
+		"tp_min_win", "tp_max_win", "wf_min_win", "wf_max_win",
+
+		"bl_mean", "bl_std", "bl_slope", "bl_intercept", "bl_slope_diff", "bl_slope_rms",
+		"bl_mean_win", "bl_std_win", "bl_slope_win", "bl_intercept_win",
+		"pz_mean", "pz_std", "pz_slope", "pz_intercept", "pz_slope_diff", "pz_slope_rms",
+
+
+		"baselineEmax", "tailEmax",
+		"trapTmax", "trapTmin", "trapTftp", "trapSmax", "trapEmax", "trapEftp",
+
+		"A_max", "tp_aoe_max", "A_max_tri", "A_min", "aoe_t_min",
+		"A_min_upslope200", "A_max_upslope200", "A_min_slope200", "A_max_slope200",
+
+		"tp_curr_min", "tp_curr_max", "curr_min", "curr_max"
+    ],
+
+	"processors": {
+		"wf_presum, ps_factor":{
+			"function": "presum",
+			"module": "dspeed.processors",
+			"args": ["waveform", 1, "ps_factor","wf_presum(shape=len(waveform)/8, period=waveform.period*8, offset=0)"],
+			"unit": ["sample", "ADC"]
+    	},
+
+		"waveform_windowed":{
+			"function": "windower",
+			"module": "dspeed.processors",
+			"args": ["waveform", "2625","waveform_windowed(shape=1400, period=waveform.period, offset=1050)"],
+			"unit": ["ADC"]
+		},
+
+		"tp_min, tp_max, wf_min, wf_max": {
+			"description": "find max and min of presummed waveform with corresponding time points",
+			"function": "min_max",
+			"module": "dspeed.processors",
+			"args": ["wf_presum", "tp_min", "tp_max", "wf_min", "wf_max"],
+			"unit": ["ns", "ns", "ADC", "ADC"]
+		},
+
+		"tp_min_win, tp_max_win, wf_min_win, wf_max_win": {
+			"description": "find max and min of windowed waveform with corresponding time points",
+			"function": "min_max",
+			"module": "dspeed.processors",
+			"args": [
+				"waveform_windowed(1400,'f')",
+				"tp_min_win",
+				"tp_max_win",
+				"wf_min_win",
+				"wf_max_win"
+			],
+			"unit": ["ns", "ns", "ADC", "ADC"]
+		},
+
+		"bl_mean_win , bl_std_win, bl_slope_win, bl_intercept_win":{
+			"function": "linear_slope_fit",
+			"module": "dspeed.processors",
+			"args" : ["waveform_windowed[0: 187]", "bl_mean_win", "bl_std_win", "bl_slope_win", "bl_intercept_win"],
+			"unit": ["ADC","ADC","ADC","ADC"]
+        },
+
+		"wf_blsub_win": {
+			"description": "baseline subtraction using mean of windowed baseline",
+			"function": "bl_subtract",
+			"module": "dspeed.processors",
+			"args": [
+				"waveform_windowed(1400,'H')",
+				"bl_mean_win",
+				"wf_blsub_win(len(waveform_windowed),'f')"
+			],
+			"unit": "ADC"
+		},
+
+		"wf_pz_win": {
+			"description": "pole zero correction using value from database",
+			"function": "pole_zero",
+			"module": "dspeed.processors",
+			"args": ["wf_blsub_win", "db.pz.tau", "wf_pz_win"],
+			"unit": "ADC",
+			"defaults": { "db.pz.tau": "450*us" }
+		},
+
+		"t0_kernel": {
+			"description": "build modified asymmetric trap filter for t0 estimation",
+			"function": "t0_filter",
+			"module": "dspeed.processors",
+			"args": [
+				"128*ns/wf_pz_win.period",
+				"2*us/wf_pz_win.period",
+				"t0_kernel(round((128*ns+2*us)/wf_pz_win.period), 'f')"
+			],
+			"unit": "ADC"
+		},
+
+		"wf_t0_filter": {
+			"description": "modified asymmetric trap filter which is convolved with waveform to remove noise while preserving leading edge",
+			"function": "convolve_wf",
+			"module": "dspeed.processors",
+			"args": [
+				"wf_pz_win",
+				"t0_kernel",
+				"'f'",
+				"wf_t0_filter(len(wf_pz_win)+round((128*ns+2*us)/wf_pz_win.period)-1, 'f', grid=wf_pz_win.grid)"
+			],
+			"unit": "ADC"
+		},
+
+		"wf_atrap": {
+			"description": "asymmetric trap filter for t0 estimation",
+			"function": "asym_trap_filter",
+			"module": "dspeed.processors",
+			"args": ["wf_pz_win", "128*ns", "64*ns", "2*us", "wf_atrap"],
+			"unit": "ADC"
+		},
+
+		"wf_t0_smooth": {
+			"description": "apply moving windows to smooth t0 filter",
+			"function": "moving_window_multi",
+			"module": "dspeed.processors",
+			"args": ["wf_t0_filter", "32", 2, 0, "wf_t0_smooth"],
+			"unit": "ADC/sample"
+		},
+
+		"conv_tmin ,tp_start, conv_min, conv_max": {
+			"description": "max of t0_filtered waveform to start backwards walk",
+			"function": "min_max",
+			"module": "dspeed.processors",
+			"args": [
+				"wf_t0_smooth[:1400]",
+				"conv_tmin",
+				"tp_start",
+				"conv_min",
+				"conv_max"
+			],
+			"unit": ["ns", "ns", "ADC", "ADC"]
+		},
+
+		"tp_0_atrap": {
+			"description": "walks backwards through asymmetric trap convolved waveform until below threshold which defines t0",
+			"function": "time_point_thresh",
+			"module": "dspeed.processors",
+			"args": ["wf_atrap", "bl_std_win", "tp_start", 0, "tp_0_atrap"],
+			"unit": "ns"
+		},
+
+		"tp_0_est": {
+			"description": "walks backwards through t0_filter convolved waveform until below threshold which defines t0",
+			"function": "time_point_thresh",
+			"module": "dspeed.processors",
+			"args": [
+				"wf_t0_filter",
+				"bl_std_win",
+				"tp_start",
+				0,
+				"tp_0_est(unit=ns)"
+			],
+			"unit": "ns"
+		},
+
+		"bl_mean , bl_std, bl_slope, bl_intercept": {
+			"description": "finds mean and rms of presummed waveform baseline (first 44.5us) as well as linear fit to this",
+			"function": "linear_slope_fit",
+			"module": "dspeed.processors",
+			"args": [
+				"wf_presum[0: round(44.5*us, wf_presum.period)]",
+				"bl_mean",
+				"bl_std",
+				"bl_slope",
+				"bl_intercept"
+			],
+			"unit": ["ADC", "ADC", "ADC", "ADC"]
+		},
+
+		"bl_slope_diff , bl_slope_rms": {
+			"description": "finds mean and rms relative to linear fit of the baseline section",
+			"function": "linear_slope_diff",
+			"module": "dspeed.processors",
+			"args": [
+				"wf_presum[0: round(44.5*us, wf_presum.period)]",
+				"bl_slope",
+				"bl_intercept",
+				"bl_slope_diff",
+				"bl_slope_rms"
+			],
+			"unit": ["ADC", "ADC"]
+		},
+
+		"wf_blsub": {
+			"description": "baseline subtraction using mean of presummed baseline",
+			"function": "bl_subtract",
+			"module": "dspeed.processors",
+			"args": ["wf_presum", "bl_mean", "wf_blsub"],
+			"unit": "ADC"
+		},
+
+		"wf_pz": {
+			"description": "pole zero correction using value from database",
+			"function": "pole_zero",
+			"module": "dspeed.processors",
+			"args": ["wf_blsub", "db.pz.tau", "wf_pz"],
+			"unit": "ADC",
+			"defaults": { "db.pz.tau": "450*us" }
+		},
+
+		"pz_mean , pz_std, pz_slope, pz_intercept": {
+			"description": "finds mean and rms of presummed waveform decay tail after pz correction (last 48us) as well as linear fit to this, should be far enough in to avoid short exponential term",
+			"function": "linear_slope_fit",
+			"module": "dspeed.processors",
+			"args": [
+				"wf_pz[round(100*us, wf_pz.period):]",
+				"pz_mean",
+				"pz_std",
+				"pz_slope",
+				"pz_intercept"
+			],
+			"unit": ["ADC", "ADC", "ADC", "ADC"]
+		},
+
+		"pz_slope_diff, pz_slope_rms": {
+			"description": "finds mean and rms relative to linear fit of the pole zero corrected tail",
+			"function": "linear_slope_diff",
+			"module": "dspeed.processors",
+			"args": [
+				"wf_pz[round(100*us, wf_pz.period):]",
+				"pz_slope",
+				"pz_intercept",
+				"pz_slope_diff",
+				"pz_slope_rms"
+			],
+			"unit": ["ADC", "ADC"]
+		},
+
+		"wf_trap": {
+			"description": "fixed length trap filter with long integration time run over all detectors",
+			"function": "trap_norm",
+			"module": "dspeed.processors",
+			"args": ["wf_pz", "db.ttrap.rise", "db.ttrap.flat", "wf_trap"],
+			"unit": "ADC",
+			"defaults": { "db.ttrap.rise": "10*us", "db.ttrap.flat": "3.008*us" }
+		},
+
+		"tp_trapTmin, tp_trapTmax, trapTmin, trapTmax": {
+			"description": "max of fixed length long trap filter",
+			"function": "min_max",
+			"module": "dspeed.processors",
+			"args": [
+				"wf_trap[round(2*db.ttrap.rise+db.ttrap.flat, wf_pz.period):-round((2*db.ttrap.rise+db.ttrap.flat), wf_pz.period)]",
+				"tp_trapTmin",
+				"tp_trapTmax",
+				"trapTmin",
+				"trapTmax"
+			],
+			"unit": ["ns", "ns", "ADC", "ADC"],
+			"defaults": { "db.ttrap.rise": "10*us", "db.ttrap.flat": "3.008*us" }
+		},
+
+		"trapTftp": {
+			"description": "sample trap filter on waveform to get measure of  energy",
+			"function": "fixed_time_pickoff",
+			"module": "dspeed.processors",
+			"args": [
+				"wf_trap",
+				"round(tp_0_est+db.ttrap.rise+db.ttrap.flat*db.ttrap.sample, wf_trap.grid)",
+				"'n'",
+				"trapTftp"
+			],
+			"defaults": {
+				"db.ttrap.rise": "10*us",
+				"db.ttrap.flat": "3.008*us",
+				"db.ttrap.sample": "0.8"
+			},
+			"unit": "ADC"
+		},
+
+		"wf_trap_short": {
+			"description": "fixed length trap filter with short integration time run over all detectors",
+			"function": "trap_norm",
+			"module": "dspeed.processors",
+			"args": ["wf_pz", "db.strap.rise", "db.strap.flat", "wf_trap_short"],
+			"unit": "ADC",
+			"defaults": { "db.strap.rise": "4*us", "db.strap.flat": "3.008*us" }
+		},
+
+		"trapSmax": {
+			"description": "max of fixed length short trap filter",
+			"function": "amax",
+			"module": "numpy",
+			"args": [
+				"wf_trap_short[round(2*db.strap.rise+db.strap.flat, wf_pz.period):-round(2*db.strap.rise+db.strap.flat, wf_pz.period)]",
+				1,
+				"trapSmax"
+			],
+			"kwargs": { "signature": "(n),()->()", "types": ["fi->f"] },
+			"defaults": { "db.strap.rise": "4*us", "db.strap.flat": "3.008*us" },
+			"unit": "ADC"
+		},
+
+		"wf_pileup_trap": {
+			"description": "trap filter with short flat top and integration time used for finding pileup",
+			"function": "trap_norm",
+			"module": "dspeed.processors",
+			"args": ["wf_pz", "1.024*us", "0", "wf_pileup_trap"],
+			"unit": "ADC"
+		},
+
+		"baselineEmax": {
+			"description": "find max of baseline section after pileup filter for pileup cut",
+			"function": "amax",
+			"module": "numpy",
+			"args": [
+				"wf_pileup_trap[round(2.048*us, wf_pileup_trap.period):round(45*us, wf_pileup_trap.period)]",
+				"1",
+				"baselineEmax"
+			],
+			"kwargs": { "signature": "(n),()->()", "types": ["fi->f"] },
+			"unit": "ADC"
+		},
+
+		"tailEmax": {
+			"description": "find max of tail section after pileup filter for pileup cut",
+			"function": "amax",
+			"module": "numpy",
+			"args": [
+				"wf_pileup_trap[round(55*us, wf_pileup_trap.period):]",
+				"1",
+				"tailEmax"
+			],
+			"kwargs": { "signature": "(n),()->()", "types": ["fi->f"] },
+			"unit": "ADC"
+		},
+
+		"wf_etrap": {
+			"description": "optimised trap filter uses filter parameters from database",
+			"function": "trap_norm",
+			"module": "dspeed.processors",
+			"args": ["wf_pz", "db.etrap.rise", "db.etrap.flat", "wf_etrap"],
+			"unit": "ADC",
+			"defaults": { "db.etrap.rise": "10*us", "db.etrap.flat": "3.008*us" }
+		},
+
+		"trapEmax": {
+			"description": "max of optimised trap filter",
+			"function": "amax",
+			"module": "numpy",
+			"args": [
+				"wf_etrap[round(2*db.etrap.rise+db.etrap.flat, wf_pz.period):-round(2*db.etrap.rise+db.etrap.flat, wf_pz.period)]",
+				1,
+				"trapEmax"
+			],
+			"kwargs": { "signature": "(n),()->()", "types": ["fi->f"] },
+			"defaults": { "db.etrap.rise": "10*us", "db.etrap.flat": "3.008*us" },
+			"unit": "ADC"
+		},
+
+		"trapEftp": {
+			"description": "samples optimised trap filter at time point 80% of way into flat top",
+			"function": "fixed_time_pickoff",
+			"module": "dspeed.processors",
+			"args": [
+				"wf_etrap",
+				"round(tp_0_est+db.etrap.rise+db.etrap.flat*db.etrap.sample, wf_etrap.grid)",
+				"'i'",
+				"trapEftp"
+			],
+			"unit": "ADC",
+			"defaults": {
+				"db.etrap.rise": "10*us",
+				"db.etrap.flat": "3*us",
+				"db.etrap.sample": "0.8"
+			}
+		},
+
+		"cusp_kernel": {
+			"description": "optimised cusp filter uses filter parameters from database",
+			"function": "cusp_filter",
+			"module": "dspeed.processors",
+			"args": [
+				"db.cusp.sigma/wf_blsub.period",
+				"round(db.cusp.flat/wf_blsub.period)",
+				"db.pz.tau/wf_blsub.period",
+				"cusp_kernel(round(len(wf_blsub)-(33.6*us/wf_blsub.period)-(4.8*us/wf_blsub.period)), 'f')"
+			],
+			"defaults": {
+				"db.cusp.sigma": "20*us",
+				"db.cusp.flat": "3*us",
+				"db.pz.tau": "450*us"
+			},
+			"unit": "ADC"
+		},
+		"wf_cusp": {
+			"description": "convolve optimised cusp filter",
+			"function": "convolve_wf",
+			"module": "dspeed.processors",
+			"args": [
+				"wf_blsub[:round(len(wf_blsub)-(33.6*us/wf_blsub.period))]",
+				"cusp_kernel",
+				"'v'",
+				"wf_cusp(round((4.8*us/wf_blsub.period)+2), 'f')"
+			],
+			"unit": "ADC"
+		},
+
+    "cuspTmin, cuspTmax, cuspEmin, cuspEmax": {
+      "description": "max of optimised cusp filter",
+      "function": "min_max",
+      "module": "dspeed.processors",
+      "args": ["wf_cusp", "cuspTmin", "cuspTmax", "cuspEmin", "cuspEmax"],
+      "unit": ["ns", "ns", "ADC", "ADC"]
+    },
+
+    "cuspEftp": {
+      "description": "samples optimised cusp filter at fixed point",
+      "function": "fixed_time_pickoff",
+      "module": "dspeed.processors",
+      "args": ["wf_cusp", "round(2.1*us/wf_blsub.period)", "'n'", "cuspEftp"],
+      "unit": "ADC",
+      "defaults": { "db.cusp.flat": "3*us" }
+    },
+
+		"wf_curr_window": {
+			"description": "window around leading edge for current estimation",
+			"function": "windower",
+			"module": "dspeed.processors",
+			"args": [
+				"wf_pz_win",
+				"tp_0_est",
+				"wf_curr_window(shape=200, period=wf_pz_win.period, offset=tp_0_est/wf_pz_win.period)"
+			],
+			"unit": ["ADC"]
+		},
+
+		"curr": {
+			"description": "differentiate waveform",
+			"function": "avg_current",
+			"module": "dspeed.processors",
+			"args": [
+				"wf_curr_window",
+				1,
+				"curr(shape=len(wf_curr_window)-1,  period=wf_curr_window.period,offset=wf_curr_window.offset)"
+			],
+			"unit": "ADC/sample"
+		},
+
+		"tp_curr_min, tp_curr_max, curr_min, curr_max": {
+			"description": "find max, min of differentiated waveform with corresponding time points",
+			"function": "min_max",
+			"module": "dspeed.processors",
+			"args": ["curr", "tp_curr_min", "tp_curr_max", "curr_min", "curr_max"],
+			"unit": ["ns", "ns", "ADC/sample", "ADC/sample"]
+		},
+
+		"curr_up": {
+			"description": "upsample differentiated waveform to 1ns sampling rate",
+			"function": "upsampler",
+			"module": "dspeed.processors",
+			"args": [
+				"curr",
+				"16",
+				"curr_up((len(curr)-1)*16, period=curr.period/16, offset=curr.offset)"
+			],
+			"unit": "ADC/sample"
+		},
+
+		"curr_av": {
+			"description": "apply moving windows to upsampled current to smooth",
+			"function": "moving_window_multi",
+			"module": "dspeed.processors",
+			"args": ["curr_up", "48", 3, 0, "curr_av"],
+			"unit": "ADC/sample"
+		},
+
+		"aoe_t_min, tp_aoe_max, A_min, A_max": {
+			"description": "find max, min of upsampled current with corresponding time points",
+			"function": "min_max",
+			"module": "dspeed.processors",
+			"args": ["curr_av", "aoe_t_min", "tp_aoe_max", "A_min", "A_max"],
+			"unit": ["ns", "ns", "ADC/sample", "ADC/sample"]
+		},
+
+		"wf_tri": {
+			"description": "alternate current estimator using short trap filter with no flat top (triangle filter)",
+			"function": "trap_norm",
+			"module": "dspeed.processors",
+			"args": ["wf_pz_win", "96*ns", "0*ns", "wf_tri"],
+			"unit": "ADC"
+		},
+
+		"aoe_t_min_tri, tp_aoe_max_tri, A_min_tri, A_max_tri": {
+			"description": "find max, min of current triangle filter with corresponding time points",
+			"function": "min_max",
+			"module": "dspeed.processors",
+			"args": [
+				"wf_tri",
+				"aoe_t_min_tri",
+				"tp_aoe_max_tri",
+				"A_min_tri",
+				"A_max_tri"
+			],
+			"unit": ["ns", "ns", "ADC/sample", "ADC/sample"]
+		},
+
+		"slope200_kernel": {
+			"description": "alternate current estimator using a moving slope estimator",
+			"function": "moving_slope",
+			"module": "dspeed.processors",
+			"args": ["slope200_kernel(12, 'f')"],
+			"unit": "ADC"
+		},
+
+		"wf_slope200": {
+			"description": "alternate current estimator using a moving slope estimator",
+			"function": "convolve_wf",
+			"module": "dspeed.processors",
+			"args": [
+				"wf_pz_win",
+				"slope200_kernel",
+				"'s'",
+				"wf_slope200(len(wf_pz_win), 'f', grid=wf_pz_win.grid)"
+			],
+			"unit": "ADC"
+		},
+
+		"aoe_t_min_slope200, tp_aoe_max_slope200, A_min_slope200, A_max_slope200": {
+			"description": "find max, min of moving slope with corresponding time points",
+			"function": "min_max",
+			"module": "dspeed.processors",
+			"args": [
+				"wf_slope200",
+				"aoe_t_min_slope200",
+				"tp_aoe_max_slope200",
+				"A_min_slope200",
+				"A_max_slope200"
+			],
+			"unit": ["ns", "ns", "ADC/sample", "ADC/sample"]
+		},
+
+		"wf_up": {
+			"description": "alternate current estimator using an upsampled moving slope estimator",
+			"function": "upsampler",
+			"module": "dspeed.processors",
+			"args": [
+				"wf_pz_win",
+				"16",
+				"wf_up((len(wf_pz_win)-1)*16, period=wf_pz_win.period/16, offset=wf_pz_win.offset)"
+			],
+			"unit": "ADC/sample"
+		},
+
+		"wf_av": {
+			"description": "moving windows to smooth upsampled leading edge",
+			"function": "moving_window_multi",
+			"module": "dspeed.processors",
+			"args": ["wf_up", "48", 3, 0, "wf_av"],
+			"unit": "ADC/sample"
+		},
+
+		"upslope200_kernel": {
+			"description": "alternate current estimator using a moving slope estimator",
+			"function": "moving_slope",
+			"module": "dspeed.processors",
+			"args": ["upslope200_kernel(200, 'f')"],
+			"unit": "ADC"
+		},
+
+		"wf_upslope200": {
+			"description": "alternate current estimator using a moving slope estimator",
+			"function": "convolve_wf",
+			"module": "dspeed.processors",
+			"args": [
+				"wf_av",
+				"upslope200_kernel",
+				"'s'",
+				"wf_upslope200(len(wf_av), 'f')"
+			],
+			"unit": "ADC"
+		},
+
+		"tp_aoe_min_upslope200, tp_aoe_max_upslope200, A_min_upslope200, A_max_upslope200": {
+			"description": "find max, min of upsampled moving slope with corresponding time points",
+			"function": "min_max",
+			"module": "dspeed.processors",
+			"args": [
+				"wf_upslope200",
+				"tp_aoe_min_upslope200",
+				"tp_aoe_max_upslope200",
+				"A_min_upslope200",
+				"A_max_upslope200"
+			],
+			"unit": ["ns", "ns", "ADC/sample", "ADC/sample"]
+		}
+	}
+}
