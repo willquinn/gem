@@ -189,9 +189,9 @@ def main():
         plt.savefig("plots/aoe_vs_energy.pdf")
 
     # filter the indices where A/E is not defined
-    use_indices = np.where(~np.isnan(dsp_data['AoE'].values))[0]
-    use_indices_df = pd.DataFrame(use_indices, columns=["use_indices"])
-    use_indices_df.to_csv('data/not_nan_indices.csv', index=False)
+    # use_indices = np.where(~np.isnan(dsp_data['AoE'].values))[0]
+    # use_indices_df = pd.DataFrame(use_indices, columns=["use_indices"])
+    # use_indices_df.to_csv('data/not_nan_indices.csv', index=False)
 
     ys_df = pd.DataFrame({'Es': dsp_data['trapEmax_cal'], "AoEs": dsp_data['AoE'].values})
     ys_df.to_json(args.output, index=False)

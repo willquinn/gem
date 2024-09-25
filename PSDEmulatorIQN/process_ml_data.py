@@ -73,7 +73,11 @@ def main():
 
     df_data = pd.concat([pss_data, df_mpp_data], axis=1)
 
-    df_data.to_json(args.output)
+    use_indices = np.where(~np.isnan(df_data['AoEs'].values))[0]
+    use_indices_df = pd.DataFrame(use_indices, columns=["use_indices"])
+    use_indices_df.to_csv('data/not_nan_indices.csv', index=False)
+
+    df_data.loc[use_indices].to_json(args.output)
 
     
 

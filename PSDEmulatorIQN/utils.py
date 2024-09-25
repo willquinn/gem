@@ -28,8 +28,12 @@ from matplotlib.gridspec import GridSpec
 
 
 ### Define some LEGEND specific variables
-GED_MAGE_ID = 1010503
-GED_NAME = "V09372A"
+#GED_MAGE_ID = 1010503
+#GED_NAME = "V09372A"
+#GED_HEIGHT = 111.8
+GED_MAGE_ID = 1010908
+GED_NAME = "P00661C"
+GED_HEIGHT = 42.1
 
 
 def gaus(x, mu, sig, A, h):
@@ -72,9 +76,14 @@ def append_PET_file(pet_filename, dict_data):
         dts = dict_data['dts'][-1]
         sumE = dict_data['Esum'][-1]
         
-        for index in range(len(Es)):
+        if isinstance(Es, list):
+            for index in range(len(Es)):
+                outfile.write(
+                    f"{ns[index]}, 1, {ts[index]}, {Es[index]}, {xs[index]}, {ys[index]}, {zs[index]}\n"
+                )
+        else:
             outfile.write(
-                f"{ns[index]}, 1, {ts[index]}, {Es[index]}, {xs[index]}, {ys[index]}, {zs[index]}\n"
+                f"{ns}, 1, {ts}, {Es}, {xs}, {ys}, {zs}\n"
             )
 
 

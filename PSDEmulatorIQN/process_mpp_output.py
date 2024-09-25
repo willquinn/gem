@@ -52,7 +52,6 @@ def main():
     data_dict = {
         f'{i}': [] for i in ['x', 'y', 'z', 'r', 't', 'dts', 'E', 'Esum', 'ievt_n']
     }
-
     create_PET_file(args.pet_file)
 
     for ifile in tqdm(range(len(files))):
@@ -61,7 +60,6 @@ def main():
             msg = f'> Input file must be .root format {file_dir}{file}'
             print(msg)
             continue
-        # print(file, n_waveforms)
 
         tree = uproot.open(f"{file_dir}{file}:simTree")
         df = tree.arrays(
@@ -71,68 +69,49 @@ def main():
             ], library='ak'
         )
         df['ievt_n'] = df['ievt'] + int(n_evts)
-        ievt_counts_df = ak.to_dataframe(df.ievt).value_counts()
-        drop_evts = ievt_counts_df[ievt_counts_df>1].index.get_level_values(0).values
 
-        for ievt in drop_evts:
-            df = df[df.ievt != ievt]
-        tmp_df = df[(ak.num(df.mage_id) == 1)]
-        df_mage_id = tmp_df[ak.flatten(tmp_df.mage_id == GED_MAGE_ID)]
+        df_sel = df[ak.any(df['mage_id'] == GED_MAGE_ID, axis=-1)]
+        for i_df_sel in tqdm(df_sel):
+            mage_id = i_df_sel.mage_id
+            ievt_n = i_df_sel.ievt_n
 
-        assert len(df_mage_id) < len(df)
+            for index, mage_id_ in enumerate(mage_id):
+                if mage_id_ == GED_MAGE_ID:
+                    cx = i_df_sel.cluster_positionX[index]
+                    cy = i_df_sel.cluster_positionY[index]
+                    cz = i_df_sel.cluster_positionZ[index]
+                    ce = i_df_sel.cluster_energy[index]*1000
+                    sum_ce = sum(ce)
+                    n_waveforms += 1
+
+                    if sum_ce > 500: 
+                        n_waveforms_pass += 1
+                        for cx_, cy_, cz_, ce_ in zip(cx, cy, cz, ce):
+                            cz_ = cz_ + GED_HEIGHT/2
+                            cr_ = np.sqrt(cx_**2 + cy_**2)
+                            dt_ = dt_file.GetTime(cr_, cz_)
                     
-        df_mage_id['cluster_energy'] = df_mage_id['cluster_energy']*1000
-        df_mage_id['cluster_positionR'] = np.sqrt(df_mage_id['cluster_positionX']**2 + df_mage_id['cluster_positionY']**2)
-        df_mage_id['cluster_positionZ'] = df_mage_id['cluster_positionZ'] + 111.8/2
-        df_mage_id['cluster_positionT'] = df_mage_id['cluster_positionX']*0 + 1.4E7
-        df_mage_id['drift_times'] = nested_drift_time(dt_file.GetTime, df_mage_id['cluster_positionR'], df_mage_id['cluster_positionZ'])
-        df_mage_id['cluster_energy_sum'] = ak.sum(df_mage_id['cluster_energy'], axis=-1)
+                            data_dict['E'].append(ce_),
+                            data_dict['r'].append(cr_),
+                            data_dict['z'].append(cz_),
+                            data_dict['y'].append(cy_),
+                            data_dict['x'].append(cx_),
+                            data_dict['t'].append(1.4E7)
+                            data_dict['dts'].append(dt_),
+                            data_dict['Esum'].append(sum_ce)
+                            data_dict['ievt_n'].append(ievt_n)
+                            append_PET_file(args.pet_file, data_dict)
 
-        for ievt_index in tqdm(range(len(df_mage_id.ievt))):
-            ievt = df_mage_id.ievt[ievt_index]
-            df_temp = df_mage_id[df_mage_id.ievt == ievt]
-                
-            assert len(df_temp.cluster_energy.to_numpy()) == 1
-            assert len(df_temp.cluster_energy.to_numpy()[0]) == 1
-
-            xs = df_temp.cluster_positionX.to_numpy()[0][0]
-            ys = df_temp.cluster_positionY.to_numpy()[0][0]
-            zs = df_temp.cluster_positionZ.to_numpy()[0][0]
-            rs = df_temp.cluster_positionR.to_numpy()[0][0]
-            ts = df_temp.cluster_positionT.to_numpy()[0][0]
-            Es = df_temp.cluster_energy.to_numpy()[0][0]
-            ns = df_temp.ievt_n.to_numpy()[0]
-            dts = df_temp.drift_times.to_numpy()[0][0]
-            sumE = np.ones_like(Es)*df_temp.cluster_energy_sum.to_numpy()[0]
-                    
-            assert sum(Es) == sumE[0]
-
-            n_waveforms += 1
-            do_waveform = True
-                    
-            if sum(Es) < 500: do_waveform = False
-            if do_waveform:
-                n_waveforms_pass += 1
-                data_dict['x'].append(xs)
-                data_dict['y'].append(ys)
-                data_dict['z'].append(zs)
-                data_dict['r'].append(rs)
-                data_dict['t'].append(ts)
-                data_dict['E'].append(Es)
-                data_dict['dts'].append(dts)
-                data_dict['Esum'].append(sumE)
-                data_dict['ievt_n'].append(ns*np.ones_like(Es))
-
-                append_PET_file(args.pet_file, data_dict)
 
         n_evts += int(max(df.ievt))              
-        # print(n_waveforms_pass, n_evts)
         if n_waveforms_pass > args.nevents:
             break
 
     df_data = pd.DataFrame(data_dict)
     df_data = df_data.explode(['x', 'y', 'z', 'r', 'E', 'dts', 'Esum', 'ievt_n']).reset_index().drop(columns=['index'])
     df_data.to_json(args.output)
+
+    print(n_waveforms, n_waveforms_pass)
 
 
 if __name__ == "__main__":
