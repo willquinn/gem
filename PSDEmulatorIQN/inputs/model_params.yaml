@@ -1,0 +1,33 @@
+
+model:
+  network_type: "no normalizing"
+  name: "PSDEmulatorIQN"
+random_seed: 42
+structure:
+  width: 50
+  hidden: 5
+  layer_output_dims: 1
+training:
+  cycles: 4
+  initiallr: 0.001
+  epochs: 100
+  batch_size: 512
+  patience: 100
+  test_size: 0.3333
+  val_size: 0.1
+data:
+  x: ['E0', 'E1', 'Esum', 'dt0', 'dt1']
+  y: ['Es', 'AoEs']
+  location: 'data/ml_data_*'
+sampling:
+  batch_size: 5000
+  num_samples: 1000
+output:
+  loss_csv: output/data/training_loss.csv
+  model_path: output/emulator.pt
+  log_path: output/logs/training.log
+  sampling_log_path: output/logs/sampling.log
+  sampling_path: output/data/emulator_samples.h5
+  train_idx: output/data/train_idx.npy
+  test_idx: output/data/test_idx.npy
+  norm_path: output/data/normalisation.json

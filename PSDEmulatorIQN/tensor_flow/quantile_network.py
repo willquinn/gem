@@ -234,25 +234,20 @@ class QuantileNet(tf.keras.Model):
 
         # Calculate gradient losses
         grads = g.gradient(out_norm, inputs)[:, -1]
-        loss = self.grad_loss_scale*tf.math.square(tf.where(grads < 0, grads,
-                                                            0))
+        loss = self.grad_loss_scale*tf.math.square(tf.where(grads < 0, grads, 0))
         grad_loss += tf.reduce_mean(loss)
 
         grads = g.gradient(out_base, inputs)[:, -1]
-        loss = self.grad_loss_scale*tf.math.square(tf.where(grads < 0, grads,
-                                                            0))
+        loss = self.grad_loss_scale*tf.math.square(tf.where(grads < 0, grads, 0))
         grad_loss += tf.reduce_mean(loss)
 
         # Transform edges of normalized network prediction
         out_norm = (out_norm+3)/6
         abs_out_norm = tf.math.abs(out_norm)
-        loss = self.tanh_loss_scale*tf.where(abs_out_norm > 1,
-                                             (abs_out_norm-1)**2, 0)
+        loss = self.tanh_loss_scale*tf.where(abs_out_norm > 1, (abs_out_norm-1)**2, 0)
         grad_loss += tf.reduce_mean(loss)
 
-        output = tf.concat([out_norm, out_base, scale, shift,
-                            tf.transpose(quantiles)],
-                           axis=1)
+        output = tf.concat([out_norm, out_base, scale, shift, tf.transpose(quantiles)], axis=1)
         return(grad_loss, output)
 
     def no_normalizing_call(self, inputs):
