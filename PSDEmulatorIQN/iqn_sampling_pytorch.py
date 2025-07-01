@@ -108,13 +108,10 @@ def get_peak_data(samples, input_vals):
 
 
 def store_sample_data(
-    model, logger, config, test_in_norm, norm_info_out, test_in
+    model, logger, config, test_in_norm, norm_info_out, test_in, output_dims
 ):
-    output_dims = test_in_norm.shape[1]  # Number of output dimensions
     num_samples = config["sampling"]["num_samples"]
     batch_size = config["sampling"]["batch_size"]
-
-    print(output_dims, num_samples, batch_size)
 
     # Define HDF5 structure
     filename = config["output"]["sampling_path"]
@@ -227,47 +224,51 @@ def calc_quant_info(config, logger, samples, test_out):
 def summarise_quants(
     logger, config, test_in, test_out, samples, quant_info_data
 ):
-
     batch_size = config["sampling"]["batch_size"]
     total_samples = len(samples)
-    output_dims = test_out.shape[1]  # Number of output dimensions
+    output_dims = test_out.shape[1]
+
+    mins = np.min(test_out, axis=0)
+    maxs = np.max(test_out, axis=0)
+    margins = 0.05 * (maxs - mins)
+    ranges = np.stack([mins - margins, maxs + margins], axis=1).tolist()
 
     data = {
-        "all_counts": [],
-        "all_edges": [],
-        "quant_counts": [],
-        "quant_edges": [],
+        "all_counts": [
+            {"predicted": None, "true": None} for _ in range(output_dims)
+        ],
+        "all_edges": [None] * output_dims,
+        "quant_counts": [None] * output_dims,
+        "quant_edges": [None] * output_dims,
         "total_counts": 0,
         "bins": 50,
-        "ranges": [[0, 3000], [0, 1]],  #
+        "ranges": ranges,
+        "pred50": [None] * output_dims,
+        "pred16": [None] * output_dims,
+        "pred84": [None] * output_dims,
     }
 
     num_batches = total_samples // batch_size + int(
         total_samples % batch_size != 0
     )
 
-    for x in range(num_batches):
-        start = x * batch_size
-        end = min((x + 1) * batch_size, total_samples)
+    for batch_idx in range(num_batches):
+        start = batch_idx * batch_size
+        end = min((batch_idx + 1) * batch_size, total_samples)
         actual_batch_size = end - start
 
-        # Slice data
-        temp_ydata = test_out[start:end, :]
-        pred_data = samples[start:end, :]
-        temp_xdata = test_in[start:end, :]
+        y_batch = test_out[start:end, :]
+        s_batch = samples[start:end, :].reshape(
+            actual_batch_size, -1, output_dims
+        )
         quants = quant_info_data["gen_quantile"][start:end, :]
 
-        weights = np.ones(temp_xdata.shape[0])
-        data["total_counts"] += np.sum(weights)
+        weights = np.ones(actual_batch_size)
+        data["total_counts"] += actual_batch_size
 
-        # Reshape pred_data to (B, S, D)
-        pred_data = pred_data.reshape(actual_batch_size, -1, output_dims)
-
-        # Compute predicted sample histograms
         pred_counts = []
         for d in range(output_dims):
-            dim_preds = pred_data[:, :, d]  # (B, S)
-            dim_preds = dim_preds.T  # (S, B) for histogram loop
+            dim_preds = s_batch[:, :, d].T
 
             counts_per_sample = []
             for s in range(dim_preds.shape[0]):
@@ -278,49 +279,37 @@ def summarise_quants(
                     weights=weights,
                 )
                 counts_per_sample.append(counts)
-            counts_per_sample = np.array(counts_per_sample)  # (S, bins)
+            counts_per_sample = np.array(counts_per_sample)
             pred_counts.append(counts_per_sample)
 
-        # True value histogram
-        for d in range(output_dims):
             true_counts, edges = np.histogram(
-                temp_ydata[:, d],
+                y_batch[:, d],
                 range=data["ranges"][d],
                 bins=data["bins"],
                 weights=weights,
             )
             bin_centers = (edges[1:] + edges[:-1]) / 2
 
-            # Quantile histogram (0–1 always)
             q_counts, q_edges = np.histogram(
                 quants[:, d], range=(0, 1), bins=data["bins"], weights=weights
             )
 
-            if x == 0:
-                data["all_counts"].append([pred_counts[d], true_counts])
-                data["all_edges"].append(bin_centers)
-                data["quant_counts"].append(q_counts)
-                data["quant_edges"].append(
-                    q_edges[1:]
-                )  # right edge for each bin
+            if batch_idx == 0:
+                data["all_counts"][d]["predicted"] = pred_counts[d]
+                data["all_counts"][d]["true"] = true_counts
+                data["all_edges"][d] = bin_centers
+                data["quant_counts"][d] = q_counts
+                data["quant_edges"][d] = q_edges[1:]
             else:
-                data["all_counts"][d][0] += pred_counts[d]
-                data["all_counts"][d][1] += true_counts
+                data["all_counts"][d]["predicted"] += pred_counts[d]
+                data["all_counts"][d]["true"] += true_counts
                 data["quant_counts"][d] += q_counts
 
-    data["pred50"] = []
-    data["pred16"] = []
-    data["pred84"] = []
-    for x in range(output_dims):
-        data["pred50"].append(
-            np.quantile(data["all_counts"][x][0], 0.5, axis=0)
-        )
-        data["pred16"].append(
-            np.quantile(data["all_counts"][x][0], 0.16, axis=0)
-        )
-        data["pred84"].append(
-            np.quantile(data["all_counts"][x][0], 0.84, axis=0)
-        )
+    for d in range(output_dims):
+        pred_histograms = data["all_counts"][d]["predicted"]
+        data["pred50"][d] = np.quantile(pred_histograms, 0.5, axis=0)
+        data["pred16"][d] = np.quantile(pred_histograms, 0.16, axis=0)
+        data["pred84"][d] = np.quantile(pred_histograms, 0.84, axis=0)
 
     logger.info(f"Total counts: {data['total_counts']}")
     logger.info(f"Total samples: {total_samples}")
@@ -440,24 +429,29 @@ def plot_errors(logger, test_out, quant_info_data, output_dir="output/plots"):
         )
 
 
-def plot_quality(logger, output_dims, quant_summary_data):
-    titles = ["E", "A/E"]
+def plot_quality(
+    logger,
+    output_dims,
+    quant_summary_data,
+    labels=None,
+    save_dir="output/plots",
+):
+    if labels is None:
+        labels = [f"Output Dim {i}" for i in range(output_dims)]
     bins = quant_summary_data["bins"]
 
-    for x in range(output_dims):
-        fig, ax1 = plt.subplots(1, 1, figsize=(6, 3))
+    for d in range(output_dims):
+        fig, ax1 = plt.subplots(figsize=(6, 3))
 
-        # Get quantile histogram info
-        counts = quant_summary_data["quant_counts"][x]  # shape: (bins,)
-        edges = quant_summary_data["quant_edges"][x]  # shape: (bins,)
-        centers = (
-            (edges[1:] + edges[:-1]) / 2 if len(edges) == bins + 1 else edges
-        )
+        counts = quant_summary_data["quant_counts"][d]
+        edges = quant_summary_data["quant_edges"][d]
+        if len(edges) == bins + 1:
+            centers = (edges[1:] + edges[:-1]) / 2
+        else:
+            centers = edges
 
-        # Normalize
         normalized = counts / np.sum(counts)
 
-        # Plot predicted quantile distribution
         ax1.plot(centers, normalized, "o", color="#d7301f", label="predicted")
         ax1.axhline(
             1.0 / bins, color="k", linestyle="--", label="uniform target"
@@ -465,52 +459,59 @@ def plot_quality(logger, output_dims, quant_summary_data):
 
         ax1.set_ylabel("p(quantile)")
         ax1.set_xlabel("quantile")
-        ax1.set_title(titles[x])
+        ax1.set_title(labels[d])
         ax1.set_ylim(0, 0.1)
         ax1.legend()
+        ax1.grid(True, linestyle=":", alpha=0.7)
+
         plt.tight_layout()
-        plt.savefig(f"output/plots/output_dim_{x}_quantile_quality.png")
+        filepath = f"{save_dir}/output_dim_{d}_quantile_quality.png"
+        plt.savefig(filepath)
+        plt.close(fig)
         logger.info(
-            f"Quantile quality plot for output dimension {x} saved:"
-            + f" output/plots/output_dim_{x}_quantile_quality.png"
+            f"Quantile quality plot for output dimension {d} saved: {filepath}"
         )
 
 
-def plot_comparison(logger, output_dims, qs_data):
-    labels = ["E", "A/E"]
-    for x in range(output_dims):
-        edges = qs_data["all_edges"][x]
-        all_counts = qs_data["all_counts"][x]
+def plot_comparison(
+    logger, output_dims, qs_data, labels=None, save_dir="output/plots"
+):
+    if labels is None:
+        labels = [f"Output Dim {i}" for i in range(output_dims)]
+
+    for d in range(output_dims):
+        edges = qs_data["all_edges"][d]
+        all_counts = qs_data["all_counts"][d]
+        pred50 = qs_data["pred50"][d]
+        pred16 = qs_data["pred16"][d]
+        pred84 = qs_data["pred84"][d]
+
         fig, (ax1, ax2) = plt.subplots(
-            2,
-            1,
-            figsize=(3.5 * 3 / 2.5, 3.8),
-            gridspec_kw={"height_ratios": [2, 0.5]},
+            2, 1, figsize=(4.2, 3.8), gridspec_kw={"height_ratios": [2, 0.5]}
         )
 
-        ax1.step(
-            edges, all_counts[1], where="mid", color="k", linewidth=0.5
-        )  # , linestyle="-.")
         ax1.step(
             edges,
-            qs_data["pred50"][x],
+            all_counts["true"],
+            where="mid",
+            color="k",
+            linewidth=0.5,
+            label="True",
+        )
+        ax1.step(
+            edges,
+            pred50,
             where="mid",
             color="#d7301f",
             linewidth=0.5,
-        )
-        ax1.scatter(
-            edges,
-            qs_data["pred50"][x],
             label="IQN median",
-            color="#d7301f",
-            marker="x",
-            s=5,
-            linewidth=0.5,
+        )
+        ax1.scatter(
+            edges, pred50, color="#d7301f", marker="x", s=5, linewidth=0.5
         )
         ax1.scatter(
             edges,
-            all_counts[1],
-            label="PSS",
+            all_counts["true"],
             color="k",
             facecolors="none",
             marker="o",
@@ -518,50 +519,49 @@ def plot_comparison(logger, output_dims, qs_data):
             linewidth=0.5,
         )
 
-        ax1.set_xlim(qs_data["ranges"][x])
-        # ax1.set_ylim(0, max(all_counts[x][0])*1.1)
+        ax1.set_xlim(qs_data["ranges"][d])
         ax1.set_ylabel("counts")
         ax1.set_xticklabels([])
-        ax1.legend()
-
         ax1.set_yscale("log")
+        ax1.legend()
+        ax1.grid(True, linestyle=":", alpha=0.7)
 
+        ratio = np.ones_like(all_counts["true"])  # true/true = 1 baseline
         ax2.scatter(
             edges,
-            all_counts[1] / all_counts[1],
+            ratio,
             color="k",
             marker="o",
             facecolors="none",
             s=5,
             linewidth=0.5,
         )
+
         ax2.errorbar(
             edges,
-            qs_data["pred50"][x] / all_counts[1],
-            xerr=0,
+            pred50 / all_counts["true"],
             yerr=[
-                qs_data["pred50"][x] / all_counts[1]
-                - qs_data["pred16"][x] / all_counts[1],
-                qs_data["pred84"][x] / all_counts[1]
-                - qs_data["pred50"][x] / all_counts[1],
+                pred50 / all_counts["true"] - pred16 / all_counts["true"],
+                pred84 / all_counts["true"] - pred50 / all_counts["true"],
             ],
+            fmt="x",
             color="#d7301f",
-            ls="",
             capsize=2,
             capthick=0.5,
-            marker="x",
-            linewidth=0.5,
             markersize=np.sqrt(5),
+            linewidth=0.5,
         )
 
-        ax2.set_xlabel(labels[x])
-        # ax2.set_ylabel(r"$\frac{\textnormal{predicted}}{\textnormal{gen}}$")
-        # ax2.set_ylim((0.9,1.1))
-        ax2.set_xlim(qs_data["ranges"][x])
-        plt.savefig(f"output/plots/output_dim_{x}_comparison.png")
+        ax2.set_xlabel(labels[d])
+        ax2.set_xlim(qs_data["ranges"][d])
+        ax2.grid(True, linestyle=":", alpha=0.7)
+
+        plt.tight_layout()
+        filepath = f"{save_dir}/output_dim_{d}_comparison.png"
+        plt.savefig(filepath)
+        plt.close(fig)
         logger.info(
-            f"Comparison plot for output dimension {x} saved:"
-            + f" output/plots/output_dim_{x}_comparison.png"
+            f"Comparison plot for output dimension {d} saved: {filepath}"
         )
 
 
@@ -589,7 +589,9 @@ def main():
 
     config = load_config(args.config)
 
-    logger = setup_logging(config)
+    logger = setup_logging(
+        config, path_overide=config["output"]["sampling_log_path"]
+    )
     logger.info("Starting sampling run")
     logger.info("Parsed arguments: %s", args)
     logger.info("Full configuration:\n%s", json.dumps(config, indent=2))
@@ -618,7 +620,13 @@ def main():
         logger.info("Sample data not found, generating new samples.")
         # Ensure the directory exists
         store_sample_data(
-            model, logger, config, test_in_norm, norm_info_out, test_in
+            model,
+            logger,
+            config,
+            test_in_norm,
+            norm_info_out,
+            test_in,
+            output_dims,
         )  # closes file
 
     with tables.open_file(config["output"]["sampling_path"], mode="r") as f:
@@ -629,7 +637,7 @@ def main():
     plot_errors(logger, test_out, quant_info_data)
 
     quant_summary = summarise_quants(
-        logger, config, test_in_norm, test_out_norm, samples, quant_info_data
+        logger, config, test_in, test_out, samples, quant_info_data
     )
     plot_quality(logger, output_dims, quant_summary)
 

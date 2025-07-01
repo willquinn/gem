@@ -335,7 +335,7 @@ def plot_training_distributions(
             path = f"plots/train_{label}_feature_{i}.png"
             plt.savefig(path)
             plt.close()
-            logger.infor(f"Saved raw feature plot: {path}")
+            logger.info(f"Saved raw feature plot: {path}")
 
     # Normalized input/output features
     for label, data in zip(["in", "out"], [train_in_norm, train_out_norm]):
