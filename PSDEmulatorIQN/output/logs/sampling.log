@@ -1,0 +1,66 @@
+2025-07-01 16:00:55,728 - INFO - Starting sampling run
+2025-07-01 16:00:55,728 - INFO - Parsed arguments: Namespace(config='inputs/model_params.yaml', log_level='INFO', plotting=True)
+2025-07-01 16:00:55,728 - INFO - Full configuration:
+{
+  "model": {
+    "network_type": "no normalizing",
+    "name": "PSDEmulatorIQN"
+  },
+  "random_seed": 42,
+  "structure": {
+    "width": 50,
+    "hidden": 5,
+    "layer_output_dims": 1
+  },
+  "training": {
+    "cycles": 4,
+    "initiallr": 0.001,
+    "epochs": 100,
+    "batch_size": 512,
+    "patience": 100,
+    "test_size": 0.3333,
+    "val_size": 0.1
+  },
+  "data": {
+    "x": [
+      "E0",
+      "E1",
+      "Esum",
+      "dt0",
+      "dt1"
+    ],
+    "y": [
+      "Es",
+      "AoEs"
+    ],
+    "location": "data/ml_data_*"
+  },
+  "sampling": {
+    "batch_size": 5000,
+    "num_samples": 1000
+  },
+  "output": {
+    "loss_csv": "output/data/training_loss.csv",
+    "model_path": "output/emulator.pt",
+    "log_path": "output/logs/training.log",
+    "sampling_log_path": "output/logs/sampling.log",
+    "sampling_path": "output/data/emulator_samples.h5",
+    "train_idx": "output/data/train_idx.npy",
+    "test_idx": "output/data/test_idx.npy",
+    "norm_path": "output/data/normalisation.json"
+  }
+}
+2025-07-01 16:00:56,574 - INFO - Sample data not found, generating new samples.
+2025-07-01 16:01:57,859 - INFO - Sampling complete. Data saved to output/data/emulator_samples.h5
+2025-07-01 16:02:00,751 - INFO - Quantile information calculated.
+2025-07-01 16:02:01,944 - INFO - Saved error plots for output dimension 0 to: output/plots/output_dim_0_errors.png
+2025-07-01 16:02:02,604 - INFO - Saved error plots for output dimension 1 to: output/plots/output_dim_1_errors.png
+2025-07-01 16:02:02,894 - INFO - Relative error plot for output dimension 0 saved: output/plots/output_dim_0_relative_error.png
+2025-07-01 16:02:03,075 - INFO - Relative error plot for output dimension 1 saved: output/plots/output_dim_1_relative_error.png
+2025-07-01 16:02:05,901 - INFO - Total counts: 64440
+2025-07-01 16:02:05,902 - INFO - Total samples: 64440
+2025-07-01 16:02:05,902 - INFO - Finished summarising.
+2025-07-01 16:02:05,972 - INFO - Quantile quality plot for output dimension 0 saved: output/plots/output_dim_0_quantile_quality.png
+2025-07-01 16:02:06,041 - INFO - Quantile quality plot for output dimension 1 saved: output/plots/output_dim_1_quantile_quality.png
+2025-07-01 16:02:06,214 - INFO - Comparison plot for output dimension 0 saved: output/plots/output_dim_0_comparison.png
+2025-07-01 16:02:06,470 - INFO - Comparison plot for output dimension 1 saved: output/plots/output_dim_1_comparison.png
