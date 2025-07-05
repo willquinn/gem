@@ -6,13 +6,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import tables
 import torch
-from pytorch_train_iqn import (
-    build_model,
-    load_config,
-    load_data,
-    setup_logging,
-)
+from pytorch_train_iqn import build_model, load_data
 from quantile_network_pytorch import sample_net
+from utils import load_config, log_config, setup_logger
 
 
 def calc_quant(data, vals):
@@ -574,7 +570,7 @@ def main():
         help="Path to the configuration file",
     )
     parser.add_argument(
-        "--log-level",
+        "--log_level",
         type=str,
         default="INFO",
         help="Override log level (e.g., DEBUG, INFO, WARNING)",
@@ -589,9 +585,11 @@ def main():
 
     config = load_config(args.config)
 
-    logger = setup_logging(
-        config, path_overide=config["output"]["sampling_log_path"]
-    )
+    log_path = config.get("output", {}).get("sampling_log_path", None)
+    logger = setup_logger(log_path, args.log_level)
+
+    log_config(logger, config)
+
     logger.info("Starting sampling run")
     logger.info("Parsed arguments: %s", args)
     logger.info("Full configuration:\n%s", json.dumps(config, indent=2))

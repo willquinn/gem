@@ -1,0 +1,16 @@
+/RMG/Manager/Logging/LogLevel detail
+
+/RMG/Geometry/RegisterDetector Germanium V09372A 001
+/RMG/Geometry/RegisterDetector Scintillator LAr 002
+
+/run/initialize
+
+/RMG/Generator/Confine Volume
+/RMG/Generator/Confinement/Physical/AddVolume Source
+
+/RMG/Generator/Select GPS
+/gps/particle gamma
+/gps/ang/type iso
+/gps/energy 2615 keV
+
+/run/beamOn 1000000

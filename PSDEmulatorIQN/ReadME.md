@@ -12,15 +12,15 @@ Originally this code was written in tensorflow but we ran into versioning issues
 
 On MAC I recommend using pyenv
 ```
-$ brew install pyenv-virtualenv  
-$ pyenv install 3.11.9  
-$ pyenv virtualenv 3.11.9 myproject-env  
+$ brew install pyenv-virtualenv
+$ pyenv install 3.11.9
+$ pyenv virtualenv 3.11.9 myproject-env
 $ pyenv activate myproject-env
 $ pip install -r requirements.txt
 ```
 
 The main code is found in quantile_network_pytorch.py. The pytorch_train_iqn.py is for training the IQN whose architecture is defined in inputs/model_params.yaml as well as some other sampling constants. I have tried to keep the directory structure clean using logs. To use this code I suggest editing the inputs/model_params.yaml file to set the names and locations of output files you require. Then run:
-``` 
+```
 $ python pytorch_train_iqn.py --config inputs/model_params.yaml --plotting True
 ```
 
@@ -33,7 +33,6 @@ $ python iqn_sampling_pytorch.py --config inputs/model_params.yaml --plotting Tr
 
 This should save an output file which helps with speed if you increase the sampling number (doesn't seem to be linear).
 
-Some useful links for IQN: 
+Some useful links for IQN:
  - [Jets paper](https://arxiv.org/pdf/2111.11415)
  - [Original code repo](https://github.com/alpha-davidson/IQNs-for-Jets)
-

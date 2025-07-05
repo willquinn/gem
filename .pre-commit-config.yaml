@@ -1,0 +1,48 @@
+repos:
+  - repo: https://github.com/myint/autoflake
+    rev: v1.4
+    hooks:
+      - id: autoflake
+        language: python
+        additional_dependencies: []
+        args:
+          - --remove-all-unused-imports
+          - --remove-unused-variables
+          - --in-place
+          - --recursive
+        files: ^PSDEmulatorIQN/
+
+  - repo: https://github.com/pycqa/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+        name: isort (python)
+        args:
+          - --profile
+          - black
+          - --filter-files
+        files: ^PSDEmulatorIQN/
+
+
+  - repo: https://github.com/psf/black
+    rev: 24.3.0
+    hooks:
+      - id: black
+        args: [--line-length=79]
+        files: ^PSDEmulatorIQN/
+
+  - repo: https://github.com/pycqa/flake8
+    rev: 7.0.0
+    hooks:
+      - id: flake8
+        files: ^PSDEmulatorIQN/
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+        files: ^PSDEmulatorIQN/
+      - id: end-of-file-fixer
+        files: ^PSDEmulatorIQN/
+      - id: check-yaml
+        files: ^PSDEmulatorIQN/

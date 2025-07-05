@@ -1,0 +1,12 @@
+geometry:
+  log_file: output/logs/geometry.log
+  geom_file: data/geometries/V09372A_geometry.gdml
+  macro_file: data/macros/V09372A_gammas.gdml
+
+clustering:
+  threshold: 0.001     # in m
+  log_file: output/logs/cluster.log
+  eres_FWHM: 2.5  # 2.5 keV
+
+detector:
+  name: V09372A

@@ -1,0 +1,80 @@
+<?xml version="1.0" ?>
+<gdml xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://cern.ch/service-spi/app/releases/GDML/schema/gdml.xsd">
+	<define/>
+	<materials>
+		<isotope name="Ge74" Z="32" N="74">
+			<atom value="73.921"/>
+		</isotope>
+		<isotope name="Ge76" Z="32" N="76">
+			<atom value="75.921"/>
+		</isotope>
+		<element name="ElementEnrichedGermanium0.908" formula="EnrGe0.908">
+			<fraction ref="Ge74" n="0.09199999999999997"/>
+			<fraction ref="Ge76" n="0.908"/>
+		</element>
+		<material name="EnrichedGermanium0.908">
+			<D value="5.551329694316549"/>
+			<fraction ref="ElementEnrichedGermanium0.908" n="1"/>
+		</material>
+	</materials>
+	<solids>
+		<genericPolycone name="V09372A_L" startphi="0" deltaphi="6.283185307179586" lunit="mm" aunit="rad">
+			<rzpoint r="0" z="0"/>
+			<rzpoint r="12" z="0"/>
+			<rzpoint r="12" z="2"/>
+			<rzpoint r="15" z="2"/>
+			<rzpoint r="15" z="0"/>
+			<rzpoint r="45.0" z="0"/>
+			<rzpoint r="46" z="1"/>
+			<rzpoint r="46" z="110.8"/>
+			<rzpoint r="45.0" z="111.8"/>
+			<rzpoint r="9.249319811555441" z="111.8"/>
+			<rzpoint r="4" z="51.8"/>
+			<rzpoint r="4" z="32.8"/>
+			<rzpoint r="0" z="32.8"/>
+		</genericPolycone>
+		<orb name="World_s" r="20" lunit="cm"/>
+		<orb name="LAr_s" r="15" lunit="cm"/>
+		<tube name="Source_s" rmin="0" rmax="1" z="1" startphi="0" deltaphi="6.283185307179586" lunit="mm" aunit="rad"/>
+	</solids>
+	<structure>
+		<volume name="V09372A_L">
+			<materialref ref="EnrichedGermanium0.908"/>
+			<solidref ref="V09372A_L"/>
+		</volume>
+		<volume name="Source_L">
+			<materialref ref="G4_BRAIN_ICRP"/>
+			<solidref ref="Source_s"/>
+		</volume>
+		<volume name="LAr_l">
+			<materialref ref="G4_lAr"/>
+			<solidref ref="LAr_s"/>
+			<physvol name="V09372A">
+				<volumeref ref="V09372A_L"/>
+				<position name="V09372A_pos" x="-5.000000000000000" y="0.000000000000000" z="-3.000000000000000" unit="cm"/>
+			</physvol>
+			<physvol name="Source">
+				<volumeref ref="Source_L"/>
+				<position name="Source_pos" x="0.000000000000000" y="5.000000000000000" z="0.000000000000000" unit="cm"/>
+			</physvol>
+		</volume>
+		<volume name="World">
+			<materialref ref="G4_Galactic"/>
+			<solidref ref="World_s"/>
+			<physvol name="LAr">
+				<volumeref ref="LAr_l"/>
+			</physvol>
+		</volume>
+	</structure>
+	<userinfo>
+		<auxiliary auxtype="RMG_detector_meta" auxvalue="">
+			<auxiliary auxtype="V09372A" auxvalue="{&quot;name&quot;: &quot;V09372A&quot;, &quot;type&quot;: &quot;icpc&quot;, &quot;production&quot;: {&quot;manufacturer&quot;: &quot;Mirion&quot;, &quot;order&quot;: 9, &quot;crystal&quot;: &quot;372&quot;, &quot;slice&quot;: &quot;A&quot;, &quot;enrichment&quot;: {&quot;val&quot;: 0.908, &quot;unc&quot;: 0.005}, &quot;passivation&quot;: true, &quot;reprocessing&quot;: false, &quot;mass_in_g&quot;: 4046, &quot;impcc&quot;: {&quot;array&quot;: {&quot;value_in_1e9e/cm3&quot;: [23, 14, 9, 8], &quot;dist_from_contact_in_mm&quot;: [-9.2, 11.8, 61.8, 111.8]}, &quot;function_pars&quot;: {&quot;z0_in_1e10e/cm3&quot;: 0, &quot;gradient_in_1e10e/cm4&quot;: 0, &quot;quadratic_in_1e10e/cm5&quot;: 0}}, &quot;delivered&quot;: &quot;2021-12-15&quot;}, &quot;geometry&quot;: {&quot;height_in_mm&quot;: 111.8, &quot;radius_in_mm&quot;: 46, &quot;borehole&quot;: {&quot;radius_in_mm&quot;: 4, &quot;depth_in_mm&quot;: 79.0}, &quot;groove&quot;: {&quot;depth_in_mm&quot;: 2, &quot;radius_in_mm&quot;: {&quot;outer&quot;: 15, &quot;inner&quot;: 12}}, &quot;pp_contact&quot;: {&quot;radius_in_mm&quot;: 12, &quot;depth_in_mm&quot;: 0}, &quot;taper&quot;: {&quot;top&quot;: {&quot;angle_in_deg&quot;: 45, &quot;height_in_mm&quot;: 1}, &quot;bottom&quot;: {&quot;angle_in_deg&quot;: 45, &quot;height_in_mm&quot;: 1}, &quot;borehole&quot;: {&quot;angle_in_deg&quot;: 5, &quot;height_in_mm&quot;: 60}}}, &quot;characterization&quot;: {&quot;manufacturer&quot;: {&quot;depletion_voltage_in_V&quot;: 4000, &quot;recommended_voltage_in_V&quot;: 4500, &quot;fwhm_co57fep_in_keV&quot;: 0.735, &quot;fwhm_co60fep_in_keV&quot;: 1.94, &quot;dl_thickness_in_mm&quot;: 0.8}, &quot;l200_site&quot;: {&quot;daq&quot;: &quot;flashcam&quot;, &quot;depletion_voltage_in_V&quot;: 4000, &quot;recommended_voltage_in_V&quot;: 4500, &quot;fwhm_in_keV&quot;: {&quot;co60fep&quot;: 1.84, &quot;qbb&quot;: 2.22, &quot;tl208fep&quot;: 2.45}, &quot;survival_fraction&quot;: {&quot;tl208dep&quot;: 0.9, &quot;qbb&quot;: 0.297, &quot;tl208sep&quot;: 0.049, &quot;tl208fep&quot;: 0.069}, &quot;fccd_in_mm&quot;: {&quot;am241&quot;: {&quot;value&quot;: 1.01, &quot;uncertainty&quot;: {&quot;uncorr&quot;: {&quot;pos&quot;: 0.014364731109268, &quot;neg&quot;: 0.01420677107369}, &quot;corr&quot;: {&quot;pos&quot;: 0.0331064971362755, &quot;neg&quot;: 0.0339772105970803}}}, &quot;ba133&quot;: {&quot;value&quot;: 0.88, &quot;uncertainty&quot;: {&quot;uncorr&quot;: {&quot;pos&quot;: 0.0151930256310983, &quot;neg&quot;: 0.0220145002796635}, &quot;corr&quot;: {&quot;pos&quot;: 0.0463827821465104, &quot;neg&quot;: 0.0541563153948766}}}}}, &quot;combined_0vbb_analysis&quot;: {&quot;fccd_in_mm&quot;: {&quot;value&quot;: 0.968, &quot;uncertainty&quot;: {&quot;pos&quot;: 0.054, &quot;neg&quot;: 0.08}}}}}"/>
+		</auxiliary>
+		<auxiliary auxtype="RMG_detector" auxvalue="germanium">
+			<auxiliary auxtype="V09372A" auxvalue="1"/>
+		</auxiliary>
+	</userinfo>
+	<setup name="Default" version="1.0">
+		<world ref="World"/>
+	</setup>
+</gdml>

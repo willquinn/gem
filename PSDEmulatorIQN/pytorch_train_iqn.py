@@ -1,8 +1,6 @@
 import argparse
 import glob
 import json
-import logging
-import os
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -10,45 +8,10 @@ import pandas as pd
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import yaml
 from quantile_network_pytorch import EarlyStopping, QuantileNet, make_dataset
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, TensorDataset
-
-
-def setup_logging(config, path_overide=None):
-    os.makedirs("output/logs", exist_ok=True)
-    logger = logging.getLogger()
-
-    log_level = config["output"].get("log_level", "INFO").upper()
-    numeric_level = getattr(logging, log_level, logging.INFO)
-    logger.setLevel(numeric_level)
-
-    if logger.hasHandlers():
-        logger.handlers.clear()
-
-    # File handler
-    if path_overide is not None:
-        fh = logging.FileHandler(path_overide)
-    else:
-        fh = logging.FileHandler(config["output"]["log_path"])
-    fh.setLevel(numeric_level)
-    formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
-    fh.setFormatter(formatter)
-    logger.addHandler(fh)
-
-    # Console handler
-    ch = logging.StreamHandler()
-    ch.setLevel(logging.INFO)
-    ch.setFormatter(formatter)
-    logger.addHandler(ch)
-
-    return logger
-
-
-def load_config(config_path):
-    with open(config_path, "r") as file:
-        return yaml.safe_load(file)
+from utils import load_config, log_config, setup_logger
 
 
 def load_data(config, logger=None):
@@ -400,7 +363,7 @@ def main():
         help="Path to the configuration file",
     )
     parser.add_argument(
-        "--log-level",
+        "--log_level",
         type=str,
         default="INFO",
         help="Override log level (e.g., DEBUG, INFO, WARNING)",
@@ -415,12 +378,13 @@ def main():
 
     config = load_config(args.config)
 
-    logger = setup_logging(config)
+    log_path = config.get("output", {}).get("log_path", None)
+    logger = setup_logger(log_path, args.log_level)
+
+    log_config(logger, config)
+
     logger.info("Starting training run")
     logger.debug("Parsed arguments: %s", args)
-    logger.info(
-        "Full configuration:\n%s", yaml.dump(config, default_flow_style=False)
-    )
 
     # Set seeds for reproducibility
     np.random.seed(config["random_seed"])
